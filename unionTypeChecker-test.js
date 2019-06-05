@@ -8,6 +8,6 @@ const TExp_1 = require("./TExp");
 // var nitzan = typeofExp(parse("(define (x : number) 5)"), makeEmptyTEnv());
 var nitzan = TExp_1.parseTE("((number | | boolean | number | nitzan ) | shushu)");
 var bob = TExp_1.unparseTExp(nitzan);
-var ohad = "ohad";
 L5_typecheck_1.L5typeof("(number | boolean | number | nitzan ) | shushu");
-assert_1.strict.deepEqual(L5_typecheck_1.L5typeof("(number | boolean)"), L5_typecheck_1.L5typeof("(boolean | number)"));
+assert_1.strict.deepEqual(TExp_1.unparseTExp(TExp_1.parseTE("(number | boolean)")), TExp_1.unparseTExp(TExp_1.parseTE("(boolean | number)")));
+// assert.deepEqual(L5typeof("(number | boolean)"), L5typeof("(boolean | number)"));

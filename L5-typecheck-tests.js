@@ -7,7 +7,7 @@ const L5_typecheck_1 = require("./L5-typecheck");
 const TEnv_1 = require("./TEnv");
 const TExp_1 = require("./TExp");
 // parseTE
-var pita = TExp_1.parseTE("number | boolean");
+TExp_1.parseTE("number | boolean");
 assert_1.strict.deepEqual(TExp_1.parseTE("number"), TExp_1.makeNumTExp());
 assert_1.strict.deepEqual(TExp_1.parseTE("boolean"), TExp_1.makeBoolTExp());
 assert_1.strict.deepEqual(TExp_1.parseTE("T1"), TExp_1.makeTVar("T1"));

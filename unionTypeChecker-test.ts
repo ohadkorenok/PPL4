@@ -13,5 +13,6 @@ var nitzan = parseTE("((number | | boolean | number | nitzan ) | shushu)");
 var bob = unparseTExp(nitzan);
 
 L5typeof("(number | boolean | number | nitzan ) | shushu");
-assert.deepEqual(L5typeof("(number | boolean)"), L5typeof("(boolean | number)"));
+assert.deepEqual(unparseTExp(parseTE("(number | boolean)")), unparseTExp(parseTE("(boolean | number)")));
+// assert.deepEqual(L5typeof("(number | boolean)"), L5typeof("(boolean | number)"));
 
