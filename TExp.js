@@ -44,7 +44,7 @@ exports.isNonTupleTExp = (x) => exports.isAtomicTExp(x) || exports.isProcTExp(x)
 const sortMe = (texpList) => {
     return texpList.sort((a, b) => a.tag < b.tag ? -1 : a.tag === b.tag ? 0 : 1);
 };
-exports.makeUnionTExp = (typeList) => ({ tag: "UnionTExp", params: sortMe(typeList) });
+exports.makeUnionTExp = (typeList) => ({ tag: "UnionTExp", params: ramda_1.uniq(sortMe(typeList)) });
 exports.isUnionTExp = (x) => x.tag === "UnionTExp";
 exports.makeNumTExp = () => ({ tag: "NumTExp" });
 exports.isNumTExp = (x) => x.tag === "NumTExp";

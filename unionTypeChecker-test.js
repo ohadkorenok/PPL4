@@ -9,5 +9,7 @@ const TExp_1 = require("./TExp");
 var nitzan = TExp_1.parseTE("((number | | boolean | number | nitzan ) | shushu)");
 var bob = TExp_1.unparseTExp(nitzan);
 L5_typecheck_1.L5typeof("(number | boolean | number | nitzan ) | shushu");
+// var asd = parse("(define (x: number) 3))");
+// var asdsad = typeofExp(asd, makeEmptyTEnv());
 assert_1.strict.deepEqual(TExp_1.unparseTExp(TExp_1.parseTE("(number | boolean)")), TExp_1.unparseTExp(TExp_1.parseTE("(boolean | number)")));
 // assert.deepEqual(L5typeof("(number | boolean)"), L5typeof("(boolean | number)"));

@@ -13,10 +13,11 @@ import {applyTEnv, makeEmptyTEnv, makeExtendTEnv, TEnv} from "./TEnv";
 import {
     isProcTExp, makeBoolTExp, makeNumTExp, makeProcTExp, makeStrTExp, makeVoidTExp,
     parseTE, unparseTExp,
-    BoolTExp, NumTExp, ProcTExp, StrTExp, TExp, isUnionTExp, isAtomicTExp
+    BoolTExp, NumTExp, ProcTExp, StrTExp, TExp, isUnionTExp, isAtomicTExp, makeUnionTExp
 } from "./TExp";
 import {getErrorMessages, hasNoError, isError} from './error';
 import {allT, first, rest, second} from './list';
+import {error} from "util";
 
 // Purpose: Check that type expressions are equivalent
 // as part of a fully-annotated type check process of exp.
@@ -106,12 +107,20 @@ export const typeofIf = (ifExp: IfExp, tenv: TEnv): TExp | Error => {
     const testTE = typeofExp(ifExp.test, tenv);
     const thenTE = typeofExp(ifExp.then, tenv);
     const altTE = typeofExp(ifExp.alt, tenv);
-    const constraint1 = checkEqualType(testTE, makeBoolTExp(), ifExp);
-    const constraint2 = checkEqualType(thenTE, altTE, ifExp);
+
+    if (isError(testTE))
+        return testTE;
+    const constraint1 = checkCompatibleTypes(testTE, makeBoolTExp());
+    if (isError(thenTE))
+        return thenTE;
+    if (isError(altTE))
+        return altTE;
+
+    const constraint2 = checkCompatibleTypes(thenTE, altTE) && checkCompatibleTypes(altTE, thenTE); // error if thenTE != altTE
     if (isError(constraint1))
         return constraint1;
     else if (isError(constraint2))
-        return constraint2;
+        return makeUnionTExp([thenTE, altTE]);
     else
         return thenTE;
 };
@@ -123,7 +132,10 @@ export const typeofIf = (ifExp: IfExp, tenv: TEnv): TExp | Error => {
 export const typeofProc = (proc: ProcExp, tenv: TEnv): TExp | Error => {
     const argsTEs = map((vd) => vd.texp, proc.args);
     const extTEnv = makeExtendTEnv(map((vd) => vd.var, proc.args), argsTEs, tenv);
-    const constraint1 = checkEqualType(typeofExps(proc.body, extTEnv), proc.returnTE, proc);
+    const blo = typeofExps(proc.body, extTEnv);
+    if (isError(blo))
+        return blo;
+    const constraint1 = checkCompatibleTypes(blo, proc.returnTE);
     if (isError(constraint1))
         return constraint1;
     else
@@ -144,8 +156,16 @@ export const typeofApp = (app: AppExp, tenv: TEnv): TExp | Error => {
         return Error(`Application of non-procedure: ${unparseTExp(ratorTE)} in ${unparse(app)}`);
     if (app.rands.length !== ratorTE.paramTEs.length)
         return Error(`Wrong parameter numbers passed to proc: ${unparse(app)}`);
-    const constraints = zipWith((rand, trand) => checkEqualType(typeofExp(rand, tenv), trand, app),
-        app.rands, ratorTE.paramTEs);
+    // const constraints = zipWith((rand, trand) => checkEqualType(typeofExp(rand, tenv), trand, app),
+    //     app.rands, ratorTE.paramTEs);
+
+    const constraints = zipWith((rand, trand) => {
+        let boo = typeofExp(rand, tenv);
+        if (isError(boo))
+            return boo;
+        return checkCompatibleTypes(boo, trand);
+    }, app.rands, ratorTE.paramTEs);
+
     if (hasNoError(constraints))
         return ratorTE.returnTE;
     else
@@ -163,8 +183,17 @@ export const typeofLet = (exp: LetExp, tenv: TEnv): TExp | Error => {
     const vars = map((b) => b.var.var, exp.bindings);
     const vals = map((b) => b.val, exp.bindings);
     const varTEs = map((b) => b.var.texp, exp.bindings);
-    const constraints = zipWith((varTE, val) => checkEqualType(varTE, typeofExp(val, tenv), exp),
-        varTEs, vals);
+    // const constraints = zipWith((varTE, val) => checkEqualType(varTE, typeofExp(val, tenv), exp),
+    //     varTEs, vals);
+
+    const constraints = zipWith((varTe, val) => {
+        let boo = typeofExp(val, tenv);
+        if (isError(boo))
+            return boo;
+        return checkCompatibleTypes(boo, varTe);
+    }, varTEs, vals);
+
+
     if (hasNoError(constraints))
         return typeofExps(exp.body, makeExtendTEnv(vars, varTEs, tenv));
     else
@@ -195,7 +224,15 @@ export const typeofLetrec = (exp: LetrecExp, tenv: TEnv): TExp | Error => {
     const tenvIs = zipWith((params, tij) => makeExtendTEnv(map((p) => p.var, params), tij, tenvBody),
         paramss, tijs);
     const types = zipWith((bodyI, tenvI) => typeofExps(bodyI, tenvI), bodies, tenvIs)
-    const constraints: (true | Error)[] = zipWith((typeI, ti) => checkEqualType(typeI, ti, exp), types, tis);
+    // const constraints: (true | Error)[] = zipWith((typeI, ti) => checkEqualType(typeI, ti, exp), types, tis);
+
+    const constraints: (true | Error)[] = zipWith((typeI, ti) => {
+        if (isError(typeI))
+            return typeI;
+        return checkCompatibleTypes(typeI, ti) === false || isError(checkCompatibleTypes(typeI, ti)) ? Error("Error : will never happen") : true
+    }, types, tis);
+
+
     if (hasNoError(constraints))
         return typeofExps(exp.body, tenvBody);
     else
@@ -223,34 +260,64 @@ export const typeofProgram = (exp: Program, tenv: TEnv): TExp | Error => {
 
 // TODO: 
 export const checkCompatibleTypes = (te1: TExp, te2: TExp): boolean | Error => {
-    return isError(te1) ? te1 : isError(te2) ? te2 :
-        isAtomicTExp(te1) ? // te1 is Atomic
-            isAtomicTExp(te2) ? deepEqual(te1, te2) :
-                isUnionTExp(te2) ? isEmpty(filter((t1: TExp): boolean => !isError(checkCompatibleTypes(te1, t1)), te2.params)) ? Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) : true :
-                    isProcTExp(te2) ? Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) :
-                        isUnionTExp(te1) ?
-                            isAtomicTExp(te2) ? Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)} `) :
-                                isUnionTExp(te2) ?
-                                    reduce((acc: boolean, curr: TExp) => acc && !isEmpty(filter((typeInList: TExp): boolean => !isError(checkCompatibleTypes(typeInList, curr)), te2.params)), true, te1.params) === true ?
-                                        true :
-                                        Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) :
-                                    isProcTExp(te2) ? Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) :
-                                        Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) :
+    let errorMsg = Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`);
+    if (isError(te1))
+        return te1;
+    if (isError(te2))
+        return te2;
+    if (isAtomicTExp(te1)) {
+        if (isAtomicTExp(te2)) {
+            if (deepEqual(te1, te2) === true) {
+                return true;
+            } else {
+                return errorMsg;
+            }
+        }
 
-                            isProcTExp(te1) ?
-                                isAtomicTExp(te2) ? Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`)
-                                    :
-                                    isUnionTExp(te2) ? Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`)
-                                        :
-                                        isProcTExp(te2) ?
-                                            te1.paramTEs.length !== te2.paramTEs.length ?
-                                                Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`)
-                                                :
-                                                isEmpty(filter((x: true | Error): boolean => isError(x), zipWith(checkCompatibleTypes, te1.paramTEs, te2.paramTEs))) //staying positive
-                                                && checkCompatibleTypes(te1.returnTE, te2.returnTE) === true ? true :
-                                                    Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) :
-                                            Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) :
-                                Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`) :
-            Error(`Incompatible types: ${unparseTExp(te1)} and ${unparseTExp(te2)}`);
+        if (isUnionTExp(te2)) {
+            if (isEmpty(filter((t2: TExp): boolean => !isError(checkCompatibleTypes(te1, t2)), te2.params))) {
+                return errorMsg;
+            } else {
+                return true;
+            }
+        }
+        if (isProcTExp(te2)) {
+            return errorMsg;
+        }
 
+    } else if (isUnionTExp(te1)) {
+        if (isAtomicTExp(te2)) {
+            return errorMsg;
+        }
+        if (isUnionTExp(te2)) {
+            if (reduce((acc: boolean, curr: TExp) => acc && !isEmpty(filter((typeInList: TExp): boolean => !isError(checkCompatibleTypes(typeInList, curr)), te2.params)), true, te1.params) === true) {
+                return true;
+            } else {
+                return errorMsg;
+            }
+        }
+        if (isProcTExp(te2)) {
+            return errorMsg;
+        }
+
+    } else if (isProcTExp(te1)) {
+        if (isAtomicTExp(te2)) {
+            return errorMsg;
+        }
+        if (isUnionTExp(te2)) {
+            return errorMsg;
+        }
+        if (isProcTExp(te2)) {
+            if (te1.paramTEs.length !== te2.paramTEs.length) {
+                return errorMsg;
+            } else {
+                if (isEmpty(filter((x: true | Error): boolean => isError(x), zipWith(checkCompatibleTypes, te1.paramTEs, te2.paramTEs))) //staying positive
+                    && checkCompatibleTypes(te1.returnTE, te2.returnTE) === true) {
+                    return true;
+                } else {
+                    return errorMsg;
+                }
+            }
+        }
+    }
 };

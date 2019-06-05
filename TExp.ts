@@ -55,7 +55,7 @@ const sortMe = (texpList: TExp[]): TExp[] => {
 };
 
 export type UnionTExp = { tag: "UnionTExp", params: TExp[]};
-export const makeUnionTExp = (typeList: TExp[]): UnionTExp => ({tag: "UnionTExp", params: sortMe(typeList)});
+export const makeUnionTExp = (typeList: TExp[]): UnionTExp => ({tag: "UnionTExp", params: uniq(sortMe(typeList))});
 export const isUnionTExp = (x: any): x is UnionTExp => x.tag === "UnionTExp";
 
 

@@ -18,6 +18,7 @@ const checkEqualType = (te1, te2, exp) => error_1.isError(te1) ? te1 :
     error_1.isError(te2) ? te2 :
         deepEqual(te1, te2) ||
             Error(`Incompatible types: ${TExp_1.unparseTExp(te1)} and ${TExp_1.unparseTExp(te2)} in ${L5_ast_1.unparse(exp)}`);
+// const checkCompatibleTypes = (te1: TExp | Error, te2: TExp | Error): true | Error =>
 // Compute the type of L5 AST exps to TE
 // ===============================================
 // Compute a Typed-L5 AST exp to a Texp on the basis
@@ -79,12 +80,18 @@ exports.typeofIf = (ifExp, tenv) => {
     const testTE = exports.typeofExp(ifExp.test, tenv);
     const thenTE = exports.typeofExp(ifExp.then, tenv);
     const altTE = exports.typeofExp(ifExp.alt, tenv);
-    const constraint1 = checkEqualType(testTE, TExp_1.makeBoolTExp(), ifExp);
-    const constraint2 = checkEqualType(thenTE, altTE, ifExp);
+    if (error_1.isError(testTE))
+        return testTE;
+    const constraint1 = exports.checkCompatibleTypes(testTE, TExp_1.makeBoolTExp());
+    if (error_1.isError(thenTE))
+        return thenTE;
+    if (error_1.isError(altTE))
+        return altTE;
+    const constraint2 = exports.checkCompatibleTypes(thenTE, altTE) && exports.checkCompatibleTypes(altTE, thenTE); // error if thenTE != altTE
     if (error_1.isError(constraint1))
         return constraint1;
     else if (error_1.isError(constraint2))
-        return constraint2;
+        return TExp_1.makeUnionTExp([thenTE, altTE]);
     else
         return thenTE;
 };
@@ -95,7 +102,10 @@ exports.typeofIf = (ifExp, tenv) => {
 exports.typeofProc = (proc, tenv) => {
     const argsTEs = ramda_1.map((vd) => vd.texp, proc.args);
     const extTEnv = TEnv_1.makeExtendTEnv(ramda_1.map((vd) => vd.var, proc.args), argsTEs, tenv);
-    const constraint1 = checkEqualType(exports.typeofExps(proc.body, extTEnv), proc.returnTE, proc);
+    const blo = exports.typeofExps(proc.body, extTEnv);
+    if (error_1.isError(blo))
+        return blo;
+    const constraint1 = exports.checkCompatibleTypes(blo, proc.returnTE);
     if (error_1.isError(constraint1))
         return constraint1;
     else
@@ -115,7 +125,14 @@ exports.typeofApp = (app, tenv) => {
         return Error(`Application of non-procedure: ${TExp_1.unparseTExp(ratorTE)} in ${L5_ast_1.unparse(app)}`);
     if (app.rands.length !== ratorTE.paramTEs.length)
         return Error(`Wrong parameter numbers passed to proc: ${L5_ast_1.unparse(app)}`);
-    const constraints = ramda_1.zipWith((rand, trand) => checkEqualType(exports.typeofExp(rand, tenv), trand, app), app.rands, ratorTE.paramTEs);
+    // const constraints = zipWith((rand, trand) => checkEqualType(typeofExp(rand, tenv), trand, app),
+    //     app.rands, ratorTE.paramTEs);
+    const constraints = ramda_1.zipWith((rand, trand) => {
+        let boo = exports.typeofExp(rand, tenv);
+        if (error_1.isError(boo))
+            return boo;
+        return exports.checkCompatibleTypes(boo, trand);
+    }, app.rands, ratorTE.paramTEs);
     if (error_1.hasNoError(constraints))
         return ratorTE.returnTE;
     else
@@ -132,7 +149,14 @@ exports.typeofLet = (exp, tenv) => {
     const vars = ramda_1.map((b) => b.var.var, exp.bindings);
     const vals = ramda_1.map((b) => b.val, exp.bindings);
     const varTEs = ramda_1.map((b) => b.var.texp, exp.bindings);
-    const constraints = ramda_1.zipWith((varTE, val) => checkEqualType(varTE, exports.typeofExp(val, tenv), exp), varTEs, vals);
+    // const constraints = zipWith((varTE, val) => checkEqualType(varTE, typeofExp(val, tenv), exp),
+    //     varTEs, vals);
+    const constraints = ramda_1.zipWith((varTe, val) => {
+        let boo = exports.typeofExp(val, tenv);
+        if (error_1.isError(boo))
+            return boo;
+        return exports.checkCompatibleTypes(boo, varTe);
+    }, varTEs, vals);
     if (error_1.hasNoError(constraints))
         return exports.typeofExps(exp.body, TEnv_1.makeExtendTEnv(vars, varTEs, tenv));
     else
@@ -161,7 +185,12 @@ exports.typeofLetrec = (exp, tenv) => {
     const tenvBody = TEnv_1.makeExtendTEnv(ps, ramda_1.zipWith((tij, ti) => TExp_1.makeProcTExp(tij, ti), tijs, tis), tenv);
     const tenvIs = ramda_1.zipWith((params, tij) => TEnv_1.makeExtendTEnv(ramda_1.map((p) => p.var, params), tij, tenvBody), paramss, tijs);
     const types = ramda_1.zipWith((bodyI, tenvI) => exports.typeofExps(bodyI, tenvI), bodies, tenvIs);
-    const constraints = ramda_1.zipWith((typeI, ti) => checkEqualType(typeI, ti, exp), types, tis);
+    // const constraints: (true | Error)[] = zipWith((typeI, ti) => checkEqualType(typeI, ti, exp), types, tis);
+    const constraints = ramda_1.zipWith((typeI, ti) => {
+        if (error_1.isError(typeI))
+            return typeI;
+        return exports.checkCompatibleTypes(typeI, ti) === false || error_1.isError(exports.checkCompatibleTypes(typeI, ti)) ? Error("Error : will never happen") : true;
+    }, types, tis);
     if (error_1.hasNoError(constraints))
         return exports.typeofExps(exp.body, tenvBody);
     else
@@ -184,4 +213,69 @@ exports.typeofProgram = (exp, tenv) => {
     return Error("TODO");
 };
 // TODO: 
-exports.checkCompatibleTypes = (te1, te2) => Error("TODO");
+exports.checkCompatibleTypes = (te1, te2) => {
+    let errorMsg = Error(`Incompatible types: ${TExp_1.unparseTExp(te1)} and ${TExp_1.unparseTExp(te2)}`);
+    if (error_1.isError(te1))
+        return te1;
+    if (error_1.isError(te2))
+        return te2;
+    if (TExp_1.isAtomicTExp(te1)) {
+        if (TExp_1.isAtomicTExp(te2)) {
+            if (deepEqual(te1, te2) === true) {
+                return true;
+            }
+            else {
+                return errorMsg;
+            }
+        }
+        if (TExp_1.isUnionTExp(te2)) {
+            if (L5_ast_1.isEmpty(ramda_1.filter((t2) => !error_1.isError(exports.checkCompatibleTypes(te1, t2)), te2.params))) {
+                return errorMsg;
+            }
+            else {
+                return true;
+            }
+        }
+        if (TExp_1.isProcTExp(te2)) {
+            return errorMsg;
+        }
+    }
+    else if (TExp_1.isUnionTExp(te1)) {
+        if (TExp_1.isAtomicTExp(te2)) {
+            return errorMsg;
+        }
+        if (TExp_1.isUnionTExp(te2)) {
+            if (ramda_1.reduce((acc, curr) => acc && !L5_ast_1.isEmpty(ramda_1.filter((typeInList) => !error_1.isError(exports.checkCompatibleTypes(typeInList, curr)), te2.params)), true, te1.params) === true) {
+                return true;
+            }
+            else {
+                return errorMsg;
+            }
+        }
+        if (TExp_1.isProcTExp(te2)) {
+            return errorMsg;
+        }
+    }
+    else if (TExp_1.isProcTExp(te1)) {
+        if (TExp_1.isAtomicTExp(te2)) {
+            return errorMsg;
+        }
+        if (TExp_1.isUnionTExp(te2)) {
+            return errorMsg;
+        }
+        if (TExp_1.isProcTExp(te2)) {
+            if (te1.paramTEs.length !== te2.paramTEs.length) {
+                return errorMsg;
+            }
+            else {
+                if (L5_ast_1.isEmpty(ramda_1.filter((x) => error_1.isError(x), ramda_1.zipWith(exports.checkCompatibleTypes, te1.paramTEs, te2.paramTEs))) //staying positive
+                    && exports.checkCompatibleTypes(te1.returnTE, te2.returnTE) === true) {
+                    return true;
+                }
+                else {
+                    return errorMsg;
+                }
+            }
+        }
+    }
+};

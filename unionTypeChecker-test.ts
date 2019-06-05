@@ -13,6 +13,13 @@ var nitzan = parseTE("((number | | boolean | number | nitzan ) | shushu)");
 var bob = unparseTExp(nitzan);
 
 L5typeof("(number | boolean | number | nitzan ) | shushu");
+
+// var asd = parse("(define (x: number) 3))");
+
+// var asdsad = typeofExp(asd, makeEmptyTEnv());
 assert.deepEqual(unparseTExp(parseTE("(number | boolean)")), unparseTExp(parseTE("(boolean | number)")));
 // assert.deepEqual(L5typeof("(number | boolean)"), L5typeof("(boolean | number)"));
+//TODO:: 3b four examples
+// TODO:: 3c four examples
+//TODO:: 1st question Everything
 
