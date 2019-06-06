@@ -9,7 +9,7 @@ import {parseTE, unparseTExp} from "./TExp";
 // Example:
 
 // var nitzan = typeofExp(parse("(define (x : number) 5)"), makeEmptyTEnv());
-var nitzan = parseTE("((number | | boolean | number | nitzan ) | shushu)");
+var nitzan = parseTE("(number | (number -> boolean) | (number | boolean))");
 var bob = unparseTExp(nitzan);
 
 L5typeof("(number | boolean | number | nitzan ) | shushu");

@@ -123,9 +123,23 @@ const validateNoError = (x) => {
     return ramda_1.reduce((acc, curr) => error_1.isError(curr) || acc, false, x) ? Error("One of the variables has an error") : x;
 };
 const parseUnionTExp = (texp) => {
-    let arrayTExpError = ramda_1.map((x) => exports.parseTExp(x), ramda_1.uniq(ramda_1.filter((x) => x !== '|', flat(texp))));
+    let arrayTExpError = ramda_1.map((x) => {
+        return L5_ast_1.isArray(x) ? exports.parseTExp(x) : exports.parseTE(x);
+        // return parseTE(x);
+    }, ramda_1.filter((x) => x !== '|', texp));
+    // map((x:any) : TExp | Error=> {
+    //     if(isUnionTExp(x)){
+    //         flat(x.params);
+    //     }
+    //     return Error("Asd");
+    // });
+    // let arrayTExpError = map((x:any) : TExp | Error => parseTExp(x),uniq(filter((x:any): boolean => x !== '|', flat(texp))));
     let booboo = validateNoError(arrayTExpError);
-    return error_1.isError(booboo) ? booboo : exports.makeUnionTExp(booboo);
+    return error_1.isError(booboo) ? booboo : exports.makeUnionTExp(ramda_1.reduce((acc, curr) => {
+        return exports.isUnionTExp(curr) ? acc.concat(flat(curr.params)) : acc.concat([curr]);
+    }, [], booboo));
+    // let bob =
+    // return isError(booboo)? booboo : (bob);
 };
 /*
 ;; expected structure: (<params> -> <returnte>)

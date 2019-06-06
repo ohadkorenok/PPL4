@@ -178,9 +178,28 @@ const validateNoError = (x:any[]):Error | any[] =>{
     return reduce((acc, curr)=> isError(curr) || acc, false,x)? Error("One of the variables has an error") : x;
 };
 const parseUnionTExp = (texp: any[]): UnionTExp | Error =>{
-    let arrayTExpError = map((x:any) : TExp | Error => parseTExp(x),uniq(filter((x:any): boolean => x !== '|', flat(texp))));
+    let arrayTExpError = map((x:any) : TExp| Error=> {
+        return isArray(x)? parseTExp(x) : parseTE(x);
+        // return parseTE(x);
+    }, filter((x:any): boolean => x !== '|', texp));
+
+
+    // map((x:any) : TExp | Error=> {
+    //     if(isUnionTExp(x)){
+    //         flat(x.params);
+    //     }
+    //     return Error("Asd");
+    // });
+
+
+
+    // let arrayTExpError = map((x:any) : TExp | Error => parseTExp(x),uniq(filter((x:any): boolean => x !== '|', flat(texp))));
     let booboo = validateNoError(arrayTExpError);
-    return isError(booboo)? booboo : makeUnionTExp(booboo);
+    return isError(booboo)? booboo : makeUnionTExp(reduce((acc:TExp[], curr: TExp): TExp[] =>{
+        return isUnionTExp(curr)? acc.concat(flat(curr.params)) : acc.concat([curr]);
+    }, [],booboo));
+    // let bob =
+    // return isError(booboo)? booboo : (bob);
 };
 
 /*
